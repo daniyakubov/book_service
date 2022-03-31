@@ -11,12 +11,12 @@ import (
 )
 
 type PutBookHit struct {
-	Title     string
-	Author    string
-	Price     float32
-	Available bool
-	Date      string
-	Username  string
+	Title     string  `json:"title"`
+	Author    string  `json:"authorsName"`
+	Price     float32 `json:"price"`
+	Available bool    `json:"available"`
+	Date      string  `json:"date"`
+	Username  string  `json:"username"`
 }
 
 type PostBookHit struct {
@@ -43,6 +43,32 @@ type GetSearchHit struct {
 	Username   string
 }
 
+type PutBookResponse struct {
+	Id string `json:"_id"`
+}
+
+type GetBookResponse struct {
+	Source struct {
+		Title       string  `json:"title"`
+		Price       float64 `json:"price"`
+		AuthorsName string  `json:"authorsName"`
+		Available   bool    `json:"available"`
+		Date        string  `json:"date"`
+	} `json:"_source"`
+}
+
+type StoreCount struct {
+	Count int `json:"count"`
+}
+
+type StoreDistinctAuthors struct {
+	Hits struct {
+		Total struct {
+			Value int `json:"value"`
+		} `json:"total"`
+	} `json:"hits"`
+}
+
 func putBook(w http.ResponseWriter, req *http.Request, client http.Client) {
 	var hit PutBookHit
 	err := json.NewDecoder(req.Body).Decode(&hit)
@@ -59,7 +85,13 @@ func putBook(w http.ResponseWriter, req *http.Request, client http.Client) {
 	}
 
 	body, err := ioutil.ReadAll(resp.Body)
-	fmt.Fprintf(w, "book: %+v", string(body))
+	var idResp PutBookResponse
+	if err := json.Unmarshal(body, &idResp); err != nil {
+		fmt.Println("Can not unmarshal JSON")
+		return
+	}
+
+	fmt.Fprintf(w, "id: %+v", idResp.Id)
 
 }
 
@@ -82,7 +114,7 @@ func postBook(w http.ResponseWriter, req *http.Request, client http.Client) {
 	}
 
 	body, err := ioutil.ReadAll(resp.Body)
-	fmt.Fprintf(w, "book: %+v", string(body))
+	fmt.Fprintf(w, "result: %+v", string(body))
 }
 
 func getBook(w http.ResponseWriter, req *http.Request, client http.Client) {
@@ -101,7 +133,13 @@ func getBook(w http.ResponseWriter, req *http.Request, client http.Client) {
 	}
 	defer resp.Body.Close()
 	body, err := ioutil.ReadAll(resp.Body)
-	fmt.Fprintf(w, "book: %+v", string(body))
+	var getResp GetBookResponse
+	if err := json.Unmarshal(body, &getResp); err != nil {
+		fmt.Println("Can not unmarshal JSON")
+		return
+	}
+
+	fmt.Fprintf(w, " %+v", getResp)
 }
 
 func deleteBook(w http.ResponseWriter, req *http.Request, client http.Client) {
@@ -216,6 +254,11 @@ func store(w http.ResponseWriter, req *http.Request) {
 			fmt.Println(err)
 			return
 		}
+		var count StoreCount
+		if err := json.Unmarshal(body, &count); err != nil {
+			fmt.Println("Can not unmarshal JSON")
+			return
+		}
 
 		s2 := fmt.Sprintf(`{"aggs" : {"authors_count" : {"cardinality" : {"field" : "authorsName.keyword"}}}}`)
 		myJson2 := bytes.NewBuffer([]byte(s2))
@@ -236,7 +279,12 @@ func store(w http.ResponseWriter, req *http.Request) {
 
 		defer resp.Body.Close()
 
-		fmt.Fprintf(w, "book: %+v", string(body)+"dfsaf"+string(body2))
+		var distinctAut StoreDistinctAuthors
+		if err := json.Unmarshal(body2, &distinctAut); err != nil {
+			fmt.Println("Can not unmarshal JSON")
+			return
+		}
+		fmt.Fprintf(w, "number of books: %d, number of distinct authors: %d", count.Count, distinctAut.Hits.Total.Value)
 	}
 }
 
