@@ -290,3 +290,6 @@ GET books/_search
     }
 }
 ~~~
+
+Now that we have a working database with books, let’s wrap things up with an API that will enable us access to it.
+We will create a web service that handles http requests that will manipulate our elasticsearch database. 
