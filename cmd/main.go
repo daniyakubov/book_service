@@ -1,5 +1,7 @@
 package main
 
+//todo: the response shouldn't be what we get from elastic, but only the necessary fields.  it should be a json object
+
 import (
 	"bytes"
 	"encoding/json"
@@ -8,11 +10,14 @@ import (
 	"net/http"
 	"strconv"
 	"time"
+
+	"github.com/daniyakubov/book_service/pkg/cache"
 )
 
 type PutBookHit struct {
-	Title     string  `json:"title"`
-	Author    string  `json:"authorsName"`
+	Title  string `json:"title"`
+	Author string `json:"authors_name"` //todo: make author's name be authors_name
+
 	Price     float32 `json:"price"`
 	Available bool    `json:"available"`
 	Date      string  `json:"date"`
@@ -69,7 +74,18 @@ type StoreDistinctAuthors struct {
 	} `json:"hits"`
 }
 
-func putBook(w http.ResponseWriter, req *http.Request, client http.Client) {
+type BookService struct {
+	client     http.Client
+	booksCache cache.BooksCache
+}
+
+func NewBookService(client http.Client, booksCache cache.BooksCache) BookService {
+	return BookService{
+		client:     client,
+		booksCache: booksCache,
+	}
+}
+func (b *BookService) putBook(w http.ResponseWriter, req *http.Request) {
 	var hit PutBookHit
 	err := json.NewDecoder(req.Body).Decode(&hit)
 	if err != nil {
@@ -77,7 +93,7 @@ func putBook(w http.ResponseWriter, req *http.Request, client http.Client) {
 		return
 	}
 	postBody, _ := json.Marshal(hit)
-	resp, err := client.Post("http://es-search-7.fiverrdev.com:9200/books/_doc/", "application/json", bytes.NewBuffer(postBody))
+	resp, err := b.client.Post("http://es-search-7.fiverrdev.com:9200/books/_doc/", "application/json", bytes.NewBuffer(postBody))
 
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -90,12 +106,13 @@ func putBook(w http.ResponseWriter, req *http.Request, client http.Client) {
 		fmt.Println("Can not unmarshal JSON")
 		return
 	}
+	//var actions Actions
 
 	fmt.Fprintf(w, "id: %+v", idResp.Id)
 
 }
 
-func postBook(w http.ResponseWriter, req *http.Request, client http.Client) {
+func (b *BookService) postBook(w http.ResponseWriter, req *http.Request) {
 	var hit PostBookHit
 	err := json.NewDecoder(req.Body).Decode(&hit)
 	if err != nil {
@@ -106,7 +123,7 @@ func postBook(w http.ResponseWriter, req *http.Request, client http.Client) {
 	s := fmt.Sprintf(`{"doc": {"title": "%s"}}`, hit.Title)
 	myJson := bytes.NewBuffer([]byte(s))
 
-	resp, err := client.Post("http://es-search-7.fiverrdev.com:9200/books/_update/"+hit.Id, "application/json", myJson)
+	resp, err := b.client.Post("http://es-search-7.fiverrdev.com:9200/books/_update/"+hit.Id, "application/json", myJson)
 
 	if err != nil {
 		fmt.Errorf("Error %s", err)
@@ -117,7 +134,7 @@ func postBook(w http.ResponseWriter, req *http.Request, client http.Client) {
 	fmt.Fprintf(w, "result: %+v", string(body))
 }
 
-func getBook(w http.ResponseWriter, req *http.Request, client http.Client) {
+func (b *BookService) getBook(w http.ResponseWriter, req *http.Request) {
 	var hit GetBookHit
 	err := req.ParseForm()
 	if err != nil {
@@ -126,7 +143,7 @@ func getBook(w http.ResponseWriter, req *http.Request, client http.Client) {
 	}
 	hit.Id = req.FormValue("id")
 	hit.Username = req.FormValue("username")
-	resp, err := client.Get("http://es-search-7.fiverrdev.com:9200/books/_doc/" + hit.Id)
+	resp, err := b.client.Get("http://es-search-7.fiverrdev.com:9200/books/_doc/" + hit.Id)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -142,7 +159,7 @@ func getBook(w http.ResponseWriter, req *http.Request, client http.Client) {
 	fmt.Fprintf(w, " %+v", getResp)
 }
 
-func deleteBook(w http.ResponseWriter, req *http.Request, client http.Client) {
+func (b *BookService) deleteBook(w http.ResponseWriter, req *http.Request) {
 	var hit DeleteBookHit
 	err := req.ParseForm()
 	if err != nil {
@@ -159,7 +176,7 @@ func deleteBook(w http.ResponseWriter, req *http.Request, client http.Client) {
 		return
 	}
 
-	resp, errD := client.Do(reqD)
+	resp, errD := b.client.Do(reqD)
 	if errD != nil {
 		fmt.Println(errD)
 		return
@@ -176,22 +193,22 @@ func deleteBook(w http.ResponseWriter, req *http.Request, client http.Client) {
 }
 
 // handler -> client to elastic db -> parse results -> process them -> create response
-func book(w http.ResponseWriter, req *http.Request) {
-	client := http.Client{Timeout: time.Duration(1) * time.Second}
+func (b *BookService) book(w http.ResponseWriter, req *http.Request) {
+
 	if req.Method == "PUT" {
-		putBook(w, req, client)
+		b.putBook(w, req)
 	} else if req.Method == "POST" {
-		postBook(w, req, client)
+		b.postBook(w, req)
 
 	} else if req.Method == "GET" {
-		getBook(w, req, client)
+		b.getBook(w, req)
 	} else if req.Method == "DELETE" {
-		deleteBook(w, req, client)
+		b.deleteBook(w, req)
 	}
 
 }
 
-func search(w http.ResponseWriter, req *http.Request) {
+func (b *BookService) search(w http.ResponseWriter, req *http.Request) { //todo: make the price range to be one field, and not all fields must be included
 	client := http.Client{Timeout: time.Duration(1) * time.Second}
 	if req.Method == "GET" {
 		var hit GetSearchHit
@@ -229,8 +246,7 @@ func search(w http.ResponseWriter, req *http.Request) {
 
 }
 
-func store(w http.ResponseWriter, req *http.Request) {
-	client := http.Client{Timeout: time.Duration(1) * time.Second}
+func (b *BookService) store(w http.ResponseWriter, req *http.Request) {
 	if req.Method == "GET" {
 		err := req.ParseForm()
 		if err != nil {
@@ -246,7 +262,7 @@ func store(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 		req.Header.Set("Content-Type", "application/json")
-		resp, err := client.Do(req)
+		resp, err := b.client.Do(req)
 
 		defer resp.Body.Close()
 		body, err := ioutil.ReadAll(resp.Body)
@@ -263,7 +279,7 @@ func store(w http.ResponseWriter, req *http.Request) {
 		s2 := fmt.Sprintf(`{"aggs" : {"authors_count" : {"cardinality" : {"field" : "authorsName.keyword"}}}}`)
 		myJson2 := bytes.NewBuffer([]byte(s2))
 
-		resp, err = client.Post("http://es-search-7.fiverrdev.com:9200/books/_search/", "application/json", myJson2)
+		resp, err = b.client.Post("http://es-search-7.fiverrdev.com:9200/books/_search/", "application/json", myJson2)
 
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
@@ -288,7 +304,7 @@ func store(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-func activity(w http.ResponseWriter, req *http.Request) {
+func (b *BookService) activity(w http.ResponseWriter, req *http.Request) {
 	fmt.Fprintf(w, req.FormValue("title"))
 }
 
@@ -302,11 +318,13 @@ func headers(w http.ResponseWriter, req *http.Request) {
 }
 
 func main() {
+	client := http.Client{Timeout: time.Duration(1) * time.Second}
 
-	http.HandleFunc("/book", book)
-	http.HandleFunc("/search", search)
-	http.HandleFunc("/store", store)
-	http.HandleFunc("/activity", activity)
+	var b BookService = NewBookService(client, cache.NewRedisCache("localhost:6379", 0, 0))
+	http.HandleFunc("/book", b.book)
+	http.HandleFunc("/search", b.search)
+	http.HandleFunc("/store", b.store)
+	http.HandleFunc("/activity", b.activity)
 
 	http.ListenAndServe(":8080", nil)
 }
