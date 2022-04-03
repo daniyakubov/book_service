@@ -3,7 +3,6 @@ package main
 //todo: the response shouldn't be what we get from elastic, but only the necessary fields.  it should be a json object
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -11,6 +10,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/daniyakubov/book_service/pkg/ElasticService"
 	"github.com/daniyakubov/book_service/pkg/cache"
 )
 
@@ -62,10 +62,6 @@ type GetBookResponse struct {
 	} `json:"_source"`
 }
 
-type StoreCount struct {
-	Count int `json:"count"`
-}
-
 type StoreDistinctAuthors struct {
 	Hits struct {
 		Total struct {
@@ -74,15 +70,21 @@ type StoreDistinctAuthors struct {
 	} `json:"hits"`
 }
 
-type BookService struct {
-	client     http.Client
-	booksCache cache.BooksCache
+type StoreCount struct {
+	Count int `json:"count"`
 }
 
-func NewBookService(client http.Client, booksCache cache.BooksCache) BookService {
+type BookService struct {
+	client         http.Client
+	booksCache     cache.BooksCache
+	elasticHandler ElasticService.ElasticHandler
+}
+
+func NewBookService(client http.Client, booksCache cache.BooksCache, elasticHandler ElasticService.ElasticHandler) BookService {
 	return BookService{
-		client:     client,
-		booksCache: booksCache,
+		client:         client,
+		booksCache:     booksCache,
+		elasticHandler: elasticHandler,
 	}
 }
 func (b *BookService) putBook(w http.ResponseWriter, req *http.Request) {
@@ -93,7 +95,7 @@ func (b *BookService) putBook(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	postBody, _ := json.Marshal(hit)
-	resp, err := b.client.Post("http://es-search-7.fiverrdev.com:9200/books/_doc/", "application/json", bytes.NewBuffer(postBody))
+	resp, err := b.elasticHandler.Put(postBody)
 
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -120,11 +122,7 @@ func (b *BookService) postBook(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	s := fmt.Sprintf(`{"doc": {"title": "%s"}}`, hit.Title)
-	myJson := bytes.NewBuffer([]byte(s))
-
-	resp, err := b.client.Post("http://es-search-7.fiverrdev.com:9200/books/_update/"+hit.Id, "application/json", myJson)
-
+	resp, err := b.elasticHandler.Post(hit.Title, hit.Id)
 	if err != nil {
 		fmt.Errorf("Error %s", err)
 		return
@@ -143,7 +141,7 @@ func (b *BookService) getBook(w http.ResponseWriter, req *http.Request) {
 	}
 	hit.Id = req.FormValue("id")
 	hit.Username = req.FormValue("username")
-	resp, err := b.client.Get("http://es-search-7.fiverrdev.com:9200/books/_doc/" + hit.Id)
+	resp, err := b.elasticHandler.Get(hit.Id)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -170,13 +168,7 @@ func (b *BookService) deleteBook(w http.ResponseWriter, req *http.Request) {
 	hit.Id = req.FormValue("id")
 	hit.Username = req.FormValue("username")
 
-	reqD, errD := http.NewRequest("DELETE", "http://es-search-7.fiverrdev.com:9200/books/_doc/"+hit.Id, nil)
-	if errD != nil {
-		fmt.Println(errD)
-		return
-	}
-
-	resp, errD := b.client.Do(reqD)
+	resp, errD := b.elasticHandler.Delete(hit.Id)
 	if errD != nil {
 		fmt.Println(errD)
 		return
@@ -209,7 +201,6 @@ func (b *BookService) book(w http.ResponseWriter, req *http.Request) {
 }
 
 func (b *BookService) search(w http.ResponseWriter, req *http.Request) { //todo: make the price range to be one field, and not all fields must be included
-	client := http.Client{Timeout: time.Duration(1) * time.Second}
 	if req.Method == "GET" {
 		var hit GetSearchHit
 		err := req.ParseForm()
@@ -223,17 +214,11 @@ func (b *BookService) search(w http.ResponseWriter, req *http.Request) { //todo:
 		hit.PriceEnd, _ = strconv.ParseFloat(req.FormValue("price_end"), 32)
 		hit.Username = req.FormValue("username")
 
-		//{"query": {"constant_score": {"filter": {"bool": {"must": [{"match": {"title": "Harry Potter"}},{"match": {"authorsName": "Anna Byers"}},{"range": {"price": {"gte": 50} }}]}}}}}
-		s := fmt.Sprintf(`{"query": {"constant_score": {"filter": {"bool": {"must":[{"match": {"title": "%s"}},{"match": {"authorsName": "%s"}},{"range": {"price": {"gte": %f, "lte": %f} }}]}}}}}`, hit.Title, hit.Author, hit.PriceStart, hit.PriceEnd)
-		myJson := bytes.NewBuffer([]byte(s))
-
-		req, err := http.NewRequest("GET", "http://es-search-7.fiverrdev.com:9200/books/_search/", myJson)
+		resp, err := b.elasticHandler.Search(hit.Title, hit.Author, hit.PriceStart, hit.PriceEnd)
 		if err != nil {
 			fmt.Println(err)
 			return
 		}
-		req.Header.Set("Content-Type", "application/json")
-		resp, err := client.Do(req)
 
 		defer resp.Body.Close()
 		body, err := ioutil.ReadAll(resp.Body)
@@ -253,47 +238,30 @@ func (b *BookService) store(w http.ResponseWriter, req *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		s1 := fmt.Sprintf(`{"query": {"match_all": {}}}`)
-		myJson := bytes.NewBuffer([]byte(s1))
 
-		req, err := http.NewRequest("GET", "http://es-search-7.fiverrdev.com:9200/books/_count/", myJson)
+		resp1, resp2, err := b.elasticHandler.Store()
+
+		defer resp1.Body.Close()
+
+		body, err := ioutil.ReadAll(resp1.Body)
 		if err != nil {
-			fmt.Println(err)
 			return
 		}
-		req.Header.Set("Content-Type", "application/json")
-		resp, err := b.client.Do(req)
 
-		defer resp.Body.Close()
-		body, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
 		var count StoreCount
 		if err := json.Unmarshal(body, &count); err != nil {
-			fmt.Println("Can not unmarshal JSON")
-			return
-		}
-
-		s2 := fmt.Sprintf(`{"aggs" : {"authors_count" : {"cardinality" : {"field" : "authorsName.keyword"}}}}`)
-		myJson2 := bytes.NewBuffer([]byte(s2))
-
-		resp, err = b.client.Post("http://es-search-7.fiverrdev.com:9200/books/_search/", "application/json", myJson2)
-
-		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 
-		body2, err := ioutil.ReadAll(resp.Body)
+		body2, err := ioutil.ReadAll(resp2.Body)
 
 		if err != nil {
 			fmt.Println(err)
 			return
 		}
 
-		defer resp.Body.Close()
+		defer resp2.Body.Close()
 
 		var distinctAut StoreDistinctAuthors
 		if err := json.Unmarshal(body2, &distinctAut); err != nil {
@@ -319,8 +287,8 @@ func headers(w http.ResponseWriter, req *http.Request) {
 
 func main() {
 	client := http.Client{Timeout: time.Duration(1) * time.Second}
-
-	var b BookService = NewBookService(client, cache.NewRedisCache("localhost:6379", 0, 0))
+	eHandler := ElasticService.NewElasticHandler("http://es-search-7.fiverrdev.com:9200/books/", client)
+	var b BookService = NewBookService(client, cache.NewRedisCache("localhost:6379", 0, 0), eHandler)
 	http.HandleFunc("/book", b.book)
 	http.HandleFunc("/search", b.search)
 	http.HandleFunc("/store", b.store)
