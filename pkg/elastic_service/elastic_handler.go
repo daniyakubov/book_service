@@ -1,4 +1,4 @@
-package ElasticService
+package elastic_service
 
 import (
 	"bytes"
@@ -8,10 +8,10 @@ import (
 
 type ElasticHandler struct {
 	Url    string
-	Client http.Client
+	Client *http.Client
 }
 
-func NewElasticHandler(url string, client http.Client) ElasticHandler {
+func NewElasticHandler(url string, client *http.Client) ElasticHandler {
 	return ElasticHandler{
 		url,
 		client,
@@ -45,8 +45,26 @@ func (e *ElasticHandler) Delete(id string) (resp *http.Response, err error) {
 
 }
 
-func (e *ElasticHandler) Search(title string, author string, priceStart float64, piceEnd float64) (resp *http.Response, err error) {
-	s := fmt.Sprintf(`{"query": {"constant_score": {"filter": {"bool": {"must":[{"match": {"title": "%s"}},{"match": {"authorsName": "%s"}},{"range": {"price": {"gte": %f, "lte": %f} }}]}}}}}`, title, author, priceStart, piceEnd)
+func (e *ElasticHandler) Search(title string, author string, priceStart float64, priceEnd float64) (resp *http.Response, err error) {
+	s := ""
+	if title == "" && author == "" && priceEnd == 0 {
+		s = fmt.Sprintf(`{"query": {"match_all": {}}}`)
+	} else if title == "" && author == "" {
+		s = fmt.Sprintf(`{"query": {"range": {"price": {"gte": %f, "lte": %f}}}}`, priceStart, priceEnd)
+	} else if title == "" && priceEnd == 0 {
+		s = fmt.Sprintf(`{"query": {"constant_score": {"filter": {"bool": {"must":[{"match": {"author": "%s"}}]}}}}}`, author)
+	} else if author == "" && priceEnd == 0 {
+		s = fmt.Sprintf(`{"query": {"constant_score": {"filter": {"bool": {"must":[{"match": {"title": "%s"}}]}}}}}`, title)
+	} else if priceEnd == 0 {
+		s = fmt.Sprintf(`{"query": {"constant_score": {"filter": {"bool": {"must":[{"match": {"title": "%s"}},{"match": {"author": "%s"}}]}}}}}`, title, author)
+	} else if title == "" {
+		s = fmt.Sprintf(`{"query": {"constant_score": {"filter": {"bool": {"must":[{"match": {"author": "%s"}},{"range": {"price": {"gte": %f, "lte": %f} }}]}}}}}`, author, priceStart, priceEnd)
+	} else if author == "" {
+		s = fmt.Sprintf(`{"query": {"constant_score": {"filter": {"bool": {"must":[{"match": {"title": "%s"}},{"range": {"price": {"gte": %f, "lte": %f} }}]}}}}}`, title, priceStart, priceEnd)
+	} else {
+		s = fmt.Sprintf(`{"query": {"constant_score": {"filter": {"bool": {"must":[{"match": {"title": "%s"}},{"match": {"author": "%s"}},{"range": {"price": {"gte": %f, "lte": %f} }}]}}}}}`, title, author, priceStart, priceEnd)
+	}
+
 	myJson := bytes.NewBuffer([]byte(s))
 
 	req, err := http.NewRequest("GET", e.Url+"_search/", myJson)
