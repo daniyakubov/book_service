@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/daniyakubov/book_service/pkg/http_service"
+
 	"gopkg.in/redis.v5"
 
 	"github.com/daniyakubov/book_service/pkg/book_Service"
@@ -19,11 +21,13 @@ func main() {
 		Password: "",
 		DB:       0,
 	})
-	b := book_Service.NewBookService(client, cache.NewRedisCache("localhost:6379", 0, 0, 3, redisClient), eHandler)
-	http.HandleFunc("/book", b.Book)
-	http.HandleFunc("/search", b.Search)
-	http.HandleFunc("/store", b.Store)
-	http.HandleFunc("/activity", b.Activity)
+	bookService := book_Service.NewBookService(cache.NewRedisCache("localhost:6379", 0, 0, 3, redisClient), eHandler)
+	httpHandler := http_service.NewHttpHandler(client, bookService)
+
+	http.HandleFunc("/book", httpHandler.Book)
+	http.HandleFunc("/search", httpHandler.Search)
+	http.HandleFunc("/store", httpHandler.Store)
+	http.HandleFunc("/activity", httpHandler.Activity)
 
 	http.ListenAndServe(":8080", nil)
 }

@@ -23,7 +23,7 @@ type Source struct {
 	PublishDate string  `json:"publish,date,omitempty"`
 }
 
-type Hit struct {
+type RHit struct {
 	Index  string  `json:"_index"`
 	Type   string  `json:"_type"`
 	Id     string  `json:"_id"`
@@ -46,7 +46,7 @@ type SearchBookResponse struct {
 			Relation string `json:"relation"`
 		} `json:"total"`
 		MaxScore float64 `json:"max_score"`
-		Hits     []Hit   `json:"hits"`
+		Hits     []RHit  `json:"hits"`
 	} `json:"hits"`
 }
 
