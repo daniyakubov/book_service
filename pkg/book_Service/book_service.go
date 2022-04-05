@@ -1,7 +1,5 @@
 package book_Service
 
-//todo: improve error handling, use https://github.com/fiverr/go_errors/blob/master, and consult avigail
-
 import (
 	"encoding/json"
 	"fmt"
@@ -36,7 +34,7 @@ func (b *BookService) PutBook(req *models.Request) (string, error) {
 	resp, err := b.elasticHandler.Put(postBody)
 
 	if err != nil {
-		return "", errors.Wrap(err, err.Error())
+		return "", err
 	}
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
@@ -46,9 +44,9 @@ func (b *BookService) PutBook(req *models.Request) (string, error) {
 	if err = json.Unmarshal(body, &idResp); err != nil {
 		return "", errors.Wrap(err, err.Error())
 	}
-	err = b.booksCache.Push(req.Data.Username, "Method:Put,"+"Route:"+req.Route)
+	err = b.booksCache.Push(req.Data.Username, "method:Put,"+"route:"+req.Route)
 	if err != nil {
-		return "", errors.Wrap(err, err.Error())
+		return "", err
 	}
 	return fmt.Sprintf("{id: %+v}", idResp.Id), nil
 
@@ -58,11 +56,11 @@ func (b *BookService) PostBook(req *models.Request) error {
 
 	_, err := b.elasticHandler.Post(req.Data.Title, req.Data.Id)
 	if err != nil {
-		return errors.Wrap(err, err.Error())
+		return err
 	}
-	err = b.booksCache.Push(req.Data.Username, "Method:Post,"+"Route:"+req.Route)
+	err = b.booksCache.Push(req.Data.Username, "method:Post,"+"route:"+req.Route)
 	if err != nil {
-		return errors.Wrap(err, err.Error())
+		return err
 	}
 	return nil
 }
@@ -71,7 +69,7 @@ func (b *BookService) GetBook(req *models.Request) (string, error) {
 
 	resp, err := b.elasticHandler.Get(req.Data.Id)
 	if err != nil {
-		return "", errors.Wrap(err, err.Error())
+		return "", err
 	}
 	defer resp.Body.Close()
 	body, err := ioutil.ReadAll(resp.Body)
@@ -87,9 +85,9 @@ func (b *BookService) GetBook(req *models.Request) (string, error) {
 		return "", errors.Wrap(err, err.Error())
 	}
 
-	err = b.booksCache.Push(req.Data.Username, "Method:Get,"+"Route:"+req.Route)
+	err = b.booksCache.Push(req.Data.Username, "method:Get,"+"route:"+req.Route)
 	if err != nil {
-		return "", errors.Wrap(err, err.Error())
+		return "", err
 	}
 	return fmt.Sprintf("%+v", string(src)), nil
 
@@ -99,7 +97,7 @@ func (b *BookService) DeleteBook(req *models.Request) error {
 
 	resp, err := b.elasticHandler.Delete(req.Data.Id)
 	if err != nil {
-		return errors.Wrap(err, err.Error())
+		return err
 	}
 	defer resp.Body.Close()
 
@@ -107,9 +105,9 @@ func (b *BookService) DeleteBook(req *models.Request) error {
 	if err != nil {
 		return errors.Wrap(err, err.Error())
 	}
-	err = b.booksCache.Push(req.Data.Username, "Method:Delete,"+"Route:"+req.Route)
+	err = b.booksCache.Push(req.Data.Username, "method:Delete,"+"route:"+req.Route)
 	if err != nil {
-		return errors.Wrap(err, err.Error())
+		return err
 	}
 	return nil
 
@@ -119,7 +117,7 @@ func (b *BookService) Search(req *models.Request) (string, error) {
 
 	resp, err := b.elasticHandler.Search(req.Data.Title, req.Data.Author, req.Data.PriceStart, req.Data.PriceEnd)
 	if err != nil {
-		return "", errors.Wrap(err, err.Error())
+		return "", err
 	}
 
 	defer resp.Body.Close()
@@ -143,9 +141,9 @@ func (b *BookService) Search(req *models.Request) (string, error) {
 		return "", errors.Wrap(err, err.Error())
 	}
 
-	err = b.booksCache.Push(req.Data.Username, "Method:Get,"+"Route:"+req.Route)
+	err = b.booksCache.Push(req.Data.Username, "method:Get,"+"route:"+req.Route)
 	if err != nil {
-		return "", errors.Wrap(err, err.Error())
+		return "", err
 	}
 	return fmt.Sprintf("%+v", string(postBody)), nil
 
@@ -181,7 +179,7 @@ func (b *BookService) Store(req *models.Request) (string, error) {
 	}
 	err = b.booksCache.Push(req.Data.Username, "method:Get,"+"route:"+req.Route)
 	if err != nil {
-		return "", errors.Wrap(err, err.Error())
+		return "", err
 	}
 	return fmt.Sprintf("{books_num: %d, distinct_authors_num: %d}", count.Count, distinctAut.Hits.Total.Value), nil
 }
@@ -190,7 +188,7 @@ func (b *BookService) Activity(username string) (string, error) {
 
 	actions, err := b.booksCache.Get(username)
 	if err != nil {
-		return "", errors.Wrap(err, err.Error())
+		return "", err
 	}
 	var res []Action.Action = make([]Action.Action, int(len(actions)))
 

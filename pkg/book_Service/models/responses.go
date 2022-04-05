@@ -1,7 +1,5 @@
 package models
 
-//todo: change the response _id to be id
-
 type PutBookResponse struct {
 	Id string `json:"_id"`
 }
@@ -17,7 +15,7 @@ type GetBookResponse struct {
 }
 
 type Source struct {
-	Id          string  `json:"_id"`
+	Id          string  `json:"id"`
 	Title       string  `json:"title"`
 	Price       float64 `json:"price"`
 	Author      string  `json:"author"`

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/daniyakubov/book_service/pkg/consts"
+
 	errors "github.com/fiverr/go_errors"
 )
 
@@ -23,7 +25,7 @@ func NewElasticHandler(url string, client *http.Client, maxSizeQuery int) Elasti
 }
 
 func (e *ElasticHandler) Post(title string, id string) (resp *http.Response, err error) {
-	s := fmt.Sprintf(`{"doc": {"title": "%s"}}`, title)
+	s := fmt.Sprintf(`{"doc": {"%s": "%s"}}`, consts.Title, title)
 	myJson := bytes.NewBuffer([]byte(s))
 
 	resp, err = e.Client.Post(e.Url+"_update/"+id, "application/json", myJson)
@@ -49,7 +51,7 @@ func (e *ElasticHandler) Get(id string) (resp *http.Response, err error) {
 }
 
 func (e *ElasticHandler) Delete(id string) (resp *http.Response, err error) {
-	req, err := http.NewRequest("DELETE", e.Url+"_doc/"+id, nil)
+	req, err := http.NewRequest(consts.DeleteMethod, e.Url+"_doc/"+id, nil)
 	if err != nil {
 		return nil, errors.Wrap(err, err.Error())
 	}
@@ -83,7 +85,7 @@ func (e *ElasticHandler) Search(title string, author string, priceStart float64,
 
 	myJson := bytes.NewBuffer([]byte(s))
 
-	req, err := http.NewRequest("GET", e.Url+"_search/", myJson)
+	req, err := http.NewRequest(consts.GetMethod, e.Url+"_search/", myJson)
 	if err != nil {
 		return nil, errors.Wrap(err, err.Error())
 	}
@@ -99,7 +101,7 @@ func (e *ElasticHandler) Store() (resp1 *http.Response, resp2 *http.Response, er
 	s1 := fmt.Sprintf(`{"query": {"match_all": {}}}`)
 	myJson := bytes.NewBuffer([]byte(s1))
 
-	req, err := http.NewRequest("GET", e.Url+"_count/", myJson)
+	req, err := http.NewRequest(consts.GetMethod, e.Url+"_count/", myJson)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, err.Error())
 	}

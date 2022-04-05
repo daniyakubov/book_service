@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/daniyakubov/book_service/pkg/consts"
+
 	"github.com/daniyakubov/book_service/pkg/book_Service"
 	"github.com/daniyakubov/book_service/pkg/book_Service/models"
 )
@@ -32,7 +34,7 @@ func (h *HttpHandler) PutBook(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	if err := json.Unmarshal(body, &hit); err != nil {
-		fmt.Println("Can not unmarshal JSON")
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	r := models.NewRequest(&hit, req.URL.Path)
@@ -56,7 +58,7 @@ func (h *HttpHandler) PostBook(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	if err := json.Unmarshal(body, &hit); err != nil {
-		fmt.Println("Can not unmarshal JSON")
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -79,8 +81,9 @@ func (h *HttpHandler) GetBook(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	hit.Id = req.FormValue("id")
-	hit.Username = req.FormValue("username")
+	hit.Id = req.FormValue(consts.Id)
+
+	hit.Username = req.FormValue(consts.UserName)
 
 	r := models.NewRequest(&hit, req.URL.Path)
 
@@ -101,8 +104,8 @@ func (h *HttpHandler) DeleteBook(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	hit.Id = req.FormValue("id")
-	hit.Username = req.FormValue("username")
+	hit.Id = req.FormValue(consts.Id)
+	hit.Username = req.FormValue(consts.UserName)
 
 	r := models.NewRequest(&hit, req.URL.Path)
 
@@ -115,30 +118,30 @@ func (h *HttpHandler) DeleteBook(w http.ResponseWriter, req *http.Request) {
 
 func (h *HttpHandler) Book(w http.ResponseWriter, req *http.Request) {
 
-	if req.Method == "PUT" {
+	if req.Method == consts.PutMethod {
 		h.PutBook(w, req)
-	} else if req.Method == "POST" {
+	} else if req.Method == consts.PostMethod {
 		h.PostBook(w, req)
 
-	} else if req.Method == "GET" {
+	} else if req.Method == consts.GetMethod {
 		h.GetBook(w, req)
-	} else if req.Method == "DELETE" {
+	} else if req.Method == consts.DeleteMethod {
 		h.DeleteBook(w, req)
 	}
 
 }
 
 func (h *HttpHandler) Search(w http.ResponseWriter, req *http.Request) {
-	if req.Method == "GET" {
+	if req.Method == consts.GetMethod {
 		var hit models.Hit
 		err := req.ParseForm()
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		hit.Title = req.FormValue("title")
-		hit.Author = req.FormValue("author")
-		sRange := req.FormValue("price_range")
+		hit.Title = req.FormValue(consts.Title)
+		hit.Author = req.FormValue(consts.Author)
+		sRange := req.FormValue(consts.PriceRange)
 		if sRange == "" {
 			hit.PriceStart = 0
 			hit.PriceEnd = 0
@@ -148,7 +151,7 @@ func (h *HttpHandler) Search(w http.ResponseWriter, req *http.Request) {
 			hit.PriceStart, _ = strconv.ParseFloat(priceRange[0], 32)
 			hit.PriceEnd, _ = strconv.ParseFloat(priceRange[1], 32)
 		}
-		hit.Username = req.FormValue("username")
+		hit.Username = req.FormValue(consts.UserName)
 		r := models.NewRequest(&hit, req.URL.Path)
 
 		s, err := h.bookService.Search(&r)
@@ -162,14 +165,14 @@ func (h *HttpHandler) Search(w http.ResponseWriter, req *http.Request) {
 }
 
 func (h *HttpHandler) Store(w http.ResponseWriter, req *http.Request) {
-	if req.Method == "GET" {
+	if req.Method == consts.GetMethod {
 		err := req.ParseForm()
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 		var hit models.Hit
-		hit.Username = req.FormValue("username")
+		hit.Username = req.FormValue(consts.UserName)
 
 		r := models.NewRequest(&hit, req.URL.Path)
 		s, err := h.bookService.Store(&r)
@@ -187,7 +190,7 @@ func (h *HttpHandler) Activity(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	user := req.FormValue("username")
+	user := req.FormValue(consts.UserName)
 	s, err := h.bookService.Activity(user)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)

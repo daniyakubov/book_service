@@ -10,18 +10,19 @@ import (
 
 	"github.com/daniyakubov/book_service/pkg/book_Service"
 	"github.com/daniyakubov/book_service/pkg/cache"
+	"github.com/daniyakubov/book_service/pkg/consts"
 	"github.com/daniyakubov/book_service/pkg/elastic_service"
 )
 
 func main() {
-	client := http.Client{Timeout: time.Duration(10) * time.Second}
-	eHandler := elastic_service.NewElasticHandler("http://es-search-7.fiverrdev.com:9200/books/", &client, 10000)
+	client := http.Client{Timeout: time.Duration(consts.ClientTimeOut) * time.Second}
+	eHandler := elastic_service.NewElasticHandler(consts.BooksUrl, &client, consts.MaxQueryResults)
 	redisClient := redis.NewClient(&redis.Options{
-		Addr:     "localhost:6379",
-		Password: "",
-		DB:       0,
+		Addr:     consts.Host,
+		Password: consts.Password,
+		DB:       consts.Db,
 	})
-	bookService := book_Service.NewBookService(cache.NewRedisCache("localhost:6379", 0, 0, 3, redisClient), eHandler)
+	bookService := book_Service.NewBookService(cache.NewRedisCache(consts.Host, consts.Db, consts.Expiration, consts.MaxActions, redisClient), eHandler)
 	httpHandler := http_service.NewHttpHandler(client, bookService)
 
 	http.HandleFunc("/book", httpHandler.Book)
@@ -29,7 +30,7 @@ func main() {
 	http.HandleFunc("/store", httpHandler.Store)
 	http.HandleFunc("/activity", httpHandler.Activity)
 
-	err := http.ListenAndServe(":8080", nil)
+	err := http.ListenAndServe(consts.HttpAddress, nil)
 	if err != nil {
 		panic(err)
 	}
