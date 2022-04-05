@@ -4,17 +4,21 @@ import (
 	"bytes"
 	"fmt"
 	"net/http"
+
+	errors "github.com/fiverr/go_errors"
 )
 
 type ElasticHandler struct {
-	Url    string
-	Client *http.Client
+	Url          string
+	Client       *http.Client
+	maxSizeQuery int
 }
 
-func NewElasticHandler(url string, client *http.Client) ElasticHandler {
+func NewElasticHandler(url string, client *http.Client, maxSizeQuery int) ElasticHandler {
 	return ElasticHandler{
 		url,
 		client,
+		maxSizeQuery,
 	}
 }
 
@@ -23,78 +27,94 @@ func (e *ElasticHandler) Post(title string, id string) (resp *http.Response, err
 	myJson := bytes.NewBuffer([]byte(s))
 
 	resp, err = e.Client.Post(e.Url+"_update/"+id, "application/json", myJson)
+	if err != nil {
+		return resp, errors.Wrap(err, err.Error())
+	}
 	return resp, err
 }
 
 func (e *ElasticHandler) Put(postBody []byte) (resp *http.Response, err error) {
-	return e.Client.Post(e.Url+"_doc/", "application/json", bytes.NewBuffer(postBody))
-
+	resp, err = e.Client.Post(e.Url+"_doc/", "application/json", bytes.NewBuffer(postBody))
+	if err != nil {
+		return resp, errors.Wrap(err, err.Error())
+	}
+	return resp, err
 }
 func (e *ElasticHandler) Get(id string) (resp *http.Response, err error) {
-	return e.Client.Get(e.Url + "_doc/" + id)
-
+	resp, err = e.Client.Get(e.Url + "_doc/" + id)
+	if err != nil {
+		return resp, errors.Wrap(err, err.Error())
+	}
+	return resp, err
 }
 
 func (e *ElasticHandler) Delete(id string) (resp *http.Response, err error) {
 	req, err := http.NewRequest("DELETE", e.Url+"_doc/"+id, nil)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, err.Error())
 	}
-
-	return e.Client.Do(req)
+	resp, err = e.Client.Do(req)
+	if err != nil {
+		return resp, errors.Wrap(err, err.Error())
+	}
+	return resp, err
 
 }
 
 func (e *ElasticHandler) Search(title string, author string, priceStart float64, priceEnd float64) (resp *http.Response, err error) {
 	s := ""
 	if title == "" && author == "" && priceEnd == 0 {
-		s = fmt.Sprintf(`{"query": {"match_all": {}}}`)
+		s = fmt.Sprintf(`{"size": %d, "query": {"match_all": {}}}`, e.maxSizeQuery)
 	} else if title == "" && author == "" {
-		s = fmt.Sprintf(`{"query": {"range": {"price": {"gte": %f, "lte": %f}}}}`, priceStart, priceEnd)
+		s = fmt.Sprintf(`{"size": %d, "query": {"range": {"price": {"gte": %f, "lte": %f}}}}`, e.maxSizeQuery, priceStart, priceEnd)
 	} else if title == "" && priceEnd == 0 {
-		s = fmt.Sprintf(`{"query": {"constant_score": {"filter": {"bool": {"must":[{"match": {"author": "%s"}}]}}}}}`, author)
+		s = fmt.Sprintf(`{"size": %d, "query": {"constant_score": {"filter": {"bool": {"must":[{"match": {"author": "%s"}}]}}}}}`, e.maxSizeQuery, author)
 	} else if author == "" && priceEnd == 0 {
-		s = fmt.Sprintf(`{"query": {"constant_score": {"filter": {"bool": {"must":[{"match": {"title": "%s"}}]}}}}}`, title)
+		s = fmt.Sprintf(`{"size": %d, "query": {"constant_score": {"filter": {"bool": {"must":[{"match": {"title": "%s"}}]}}}}}`, e.maxSizeQuery, title)
 	} else if priceEnd == 0 {
-		s = fmt.Sprintf(`{"query": {"constant_score": {"filter": {"bool": {"must":[{"match": {"title": "%s"}},{"match": {"author": "%s"}}]}}}}}`, title, author)
+		s = fmt.Sprintf(`{"size": %d, "query": {"constant_score": {"filter": {"bool": {"must":[{"match": {"title": "%s"}},{"match": {"author": "%s"}}]}}}}}`, e.maxSizeQuery, title, author)
 	} else if title == "" {
-		s = fmt.Sprintf(`{"query": {"constant_score": {"filter": {"bool": {"must":[{"match": {"author": "%s"}},{"range": {"price": {"gte": %f, "lte": %f} }}]}}}}}`, author, priceStart, priceEnd)
+		s = fmt.Sprintf(`{"size": %d, "query": {"constant_score": {"filter": {"bool": {"must":[{"match": {"author": "%s"}},{"range": {"price": {"gte": %f, "lte": %f} }}]}}}}}`, e.maxSizeQuery, author, priceStart, priceEnd)
 	} else if author == "" {
-		s = fmt.Sprintf(`{"query": {"constant_score": {"filter": {"bool": {"must":[{"match": {"title": "%s"}},{"range": {"price": {"gte": %f, "lte": %f} }}]}}}}}`, title, priceStart, priceEnd)
+		s = fmt.Sprintf(`{"size": %d, "query": {"constant_score": {"filter": {"bool": {"must":[{"match": {"title": "%s"}},{"range": {"price": {"gte": %f, "lte": %f} }}]}}}}}`, e.maxSizeQuery, title, priceStart, priceEnd)
 	} else {
-		s = fmt.Sprintf(`{"query": {"constant_score": {"filter": {"bool": {"must":[{"match": {"title": "%s"}},{"match": {"author": "%s"}},{"range": {"price": {"gte": %f, "lte": %f} }}]}}}}}`, title, author, priceStart, priceEnd)
+		s = fmt.Sprintf(`{"size": %d, "query": {"constant_score": {"filter": {"bool": {"must":[{"match": {"title": "%s"}},{"match": {"author": "%s"}},{"range": {"price": {"gte": %f, "lte": %f} }}]}}}}}`, e.maxSizeQuery, title, author, priceStart, priceEnd)
 	}
 
 	myJson := bytes.NewBuffer([]byte(s))
 
 	req, err := http.NewRequest("GET", e.Url+"_search/", myJson)
 	if err != nil {
-		return
+		return nil, errors.Wrap(err, err.Error())
 	}
 	req.Header.Set("Content-Type", "application/json")
-	return e.Client.Do(req)
+	resp, err = e.Client.Do(req)
+	if err != nil {
+		return resp, errors.Wrap(err, err.Error())
+	}
+	return resp, err
 }
 
 func (e *ElasticHandler) Store() (resp1 *http.Response, resp2 *http.Response, err error) {
 	s1 := fmt.Sprintf(`{"query": {"match_all": {}}}`)
 	myJson := bytes.NewBuffer([]byte(s1))
 
-	req, err1 := http.NewRequest("GET", e.Url+"_count/", myJson)
-	if err1 != nil {
-		return nil, nil, err1
+	req, err := http.NewRequest("GET", e.Url+"_count/", myJson)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, err.Error())
 	}
 	req.Header.Set("Content-Type", "application/json")
-	resp1, err1 = e.Client.Do(req)
-	if err1 != nil {
-		return nil, nil, err1
+	resp1, err = e.Client.Do(req)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, err.Error())
 	}
 
 	s2 := fmt.Sprintf(`{"aggs" : {"authors_count" : {"cardinality" : {"field" : "authorsName.keyword"}}}}`)
 	myJson2 := bytes.NewBuffer([]byte(s2))
 
-	resp2, err2 := e.Client.Post(e.Url+"_search/", "application/json", myJson2)
-	if err2 != nil {
-		return nil, nil, err2
+	resp2, err = e.Client.Post(e.Url+"_search/", "application/json", myJson2)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, err.Error())
 	}
 	return resp1, resp2, nil
 }

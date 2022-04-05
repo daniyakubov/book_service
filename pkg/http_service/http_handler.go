@@ -46,8 +46,20 @@ func (h *HttpHandler) PutBook(w http.ResponseWriter, req *http.Request) {
 }
 
 func (h *HttpHandler) PostBook(w http.ResponseWriter, req *http.Request) {
+
 	var hit models.Hit
-	err := json.NewDecoder(req.Body).Decode(&hit) //todo: change to unmarshal
+
+	body, err := ioutil.ReadAll(req.Body)
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if err := json.Unmarshal(body, &hit); err != nil {
+		fmt.Println("Can not unmarshal JSON")
+		return
+	}
+
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -167,7 +179,6 @@ func (h *HttpHandler) Store(w http.ResponseWriter, req *http.Request) {
 		}
 		fmt.Fprintf(w, s)
 	}
-
 }
 
 func (h *HttpHandler) Activity(w http.ResponseWriter, req *http.Request) {
@@ -177,7 +188,11 @@ func (h *HttpHandler) Activity(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	user := req.FormValue("username")
-	s := h.bookService.Activity(user)
+	s, err := h.bookService.Activity(user)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	fmt.Fprintf(w, s)
 
 }

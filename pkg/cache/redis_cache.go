@@ -1,9 +1,9 @@
 package cache
 
 import (
-	"strings"
 	"time"
 
+	errors "github.com/fiverr/go_errors"
 	"gopkg.in/redis.v5"
 )
 
@@ -34,7 +34,7 @@ func (cache *RedisCache) getClient() *redis.Client {
 	})
 }
 
-func (cache *RedisCache) Push(key string, value string) {
+func (cache *RedisCache) Push(key string, value string) error {
 	length, err := cache.client.LLen(key).Result()
 	if err != nil {
 		panic(err)
@@ -45,26 +45,20 @@ func (cache *RedisCache) Push(key string, value string) {
 	if length >= cache.maxSize {
 		_, err := cache.client.LPop(key).Result()
 		if err != nil {
-			panic(err)
+			return errors.Wrap(err, err.Error())
 		}
 	}
+	return nil
 }
 
-func (cache *RedisCache) Get(key string) string {
+func (cache *RedisCache) Get(key string) ([]string, error) {
 	length, err := cache.client.LLen(key).Result()
 	if err != nil {
 		panic(err)
 	}
-	val, err := cache.client.LRange(key, 0, length).Result()
+	actions, err := cache.client.LRange(key, 0, length).Result()
 	if err != nil {
-		panic(err)
+		return nil, errors.Wrap(err, err.Error())
 	}
-	s := "{" //todo: return the array of strings, and manipulate it int the father function (using marshal)
-	for _, action := range val {
-		s += action + ","
-	}
-	s = strings.TrimSuffix(s, ",")
-	s += "}"
-
-	return s
+	return actions, nil
 }

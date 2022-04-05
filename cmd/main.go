@@ -15,7 +15,7 @@ import (
 
 func main() {
 	client := http.Client{Timeout: time.Duration(10) * time.Second}
-	eHandler := elastic_service.NewElasticHandler("http://es-search-7.fiverrdev.com:9200/books/", &client)
+	eHandler := elastic_service.NewElasticHandler("http://es-search-7.fiverrdev.com:9200/books/", &client, 10000)
 	redisClient := redis.NewClient(&redis.Options{
 		Addr:     "localhost:6379",
 		Password: "",
@@ -29,5 +29,8 @@ func main() {
 	http.HandleFunc("/store", httpHandler.Store)
 	http.HandleFunc("/activity", httpHandler.Activity)
 
-	http.ListenAndServe(":8080", nil)
+	err := http.ListenAndServe(":8080", nil)
+	if err != nil {
+		panic(err)
+	}
 }
